@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ESP32 Dashboard</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1>ESP32 Dashboard</h1>
+      <span id="connBadge" class="badge badge-offline">Connecting</span>
+    </div>
+    <div class="topbar-right">
+      <button id="themeBtn" class="btn-ghost">Dark mode</button>
+      <button id="setupBtn" class="btn-ghost">Setup</button>
+    </div>
+  </header>
+
+  <div class="device-bar">
+    <div class="device-stat"><span class="stat-label">IP</span><span id="statIp">—</span></div>
+    <div class="device-stat"><span class="stat-label">Uptime</span><span id="statUptime">—</span></div>
+    <div class="device-stat"><span class="stat-label">Free heap</span><span id="statHeap">—</span></div>
+    <div class="device-stat"><span class="stat-label">Clients</span><span id="statClients">—</span></div>
+  </div>
+
+  <main>
+    <!-- Pin map: visible once sensors are configured -->
+    <section id="pinMapPanel" class="card pin-map-panel hidden">
+      <h2 class="section-title">Connected Sensors</h2>
+      <div id="pinMapGrid" class="pin-map-grid"></div>
+    </section>
+
+    <!-- Empty state -->
+    <section id="emptyPanel" class="card empty-panel">
+      <div class="empty-icon">○</div>
+      <h2>No sensors configured</h2>
+      <p>Open Setup, add sensors, assign GPIO pins, then Save.<br>The dashboard assembles itself from that config.</p>
+      <button id="emptySetupBtn" class="btn-primary">Open Setup</button>
+    </section>
+
+    <!-- Live sensor cards -->
+    <section id="dashboard" class="dashboard"></section>
+
+    <!-- Setup / pin mapping panel -->
+    <section id="setupPanel" class="card setup-panel hidden">
+      <div class="panel-header">
+        <h2>Pin Mapping</h2>
+        <div class="panel-actions">
+          <button id="probeBtn" class="btn-ghost">Probe Pins</button>
+          <button id="i2cBtn" class="btn-ghost">I²C Scan</button>
+          <button id="libraryBtn" class="btn-ghost">+ From library</button>
+          <button id="addBtn" class="btn-ghost">+ Blank</button>
+          <button id="saveBtn" class="btn-primary">Save config</button>
+        </div>
+      </div>
+      <p id="i2cHint" class="hint"></p>
+
+      <!-- Sensor library picker -->
+      <div id="libraryPanel" class="library-panel hidden">
+        <div class="library-search-row">
+          <input id="librarySearch" type="search" placeholder="Search sensors…" autocomplete="off" />
+          <button id="libraryClose" class="btn-ghost">Close</button>
+        </div>
+        <div id="libraryCatalog" class="library-catalog"></div>
+      </div>
+
+      <!-- Pin probe results -->
+      <div id="probePanel" class="probe-panel hidden">
+        <div class="probe-header">
+          <span class="section-title" style="margin:0">Pin Probe</span>
+          <span class="probe-note">Connect a sensor to a pin, then probe to see which pin lights up. Active = signal detected.</span>
+        </div>
+        <div id="probeGrid" class="probe-grid"></div>
+      </div>
+
+      <div id="configList" class="config-list"></div>
+    </section>
+
+    <div class="export-bar">
+      <a href="/api/export.csv"  class="btn-ghost" target="_blank">Export CSV</a>
+      <a href="/api/export.json" class="btn-ghost" target="_blank">Export JSON</a>
+      <button id="clearLogBtn" class="btn-ghost">Clear log</button>
+    </div>
+  </main>
+
+  <!-- Template for one sensor row in the setup panel -->
+  <template id="sensorRowTpl">
+    <div class="config-row">
+      <div class="field">
+        <label class="field-label">Label</label>
+        <input class="s-label" placeholder="e.g. Soil moisture" />
+      </div>
+      <div class="field">
+        <label class="field-label">Type</label>
+        <select class="s-type">
+          <option value="analog">Generic analog</option>
+          <option value="temperature">Temperature (analog)</option>
+          <option value="humidity">Humidity (analog)</option>
+          <option value="gas">Gas sensor (MQ-x)</option>
+          <option value="soil">Soil moisture</option>
+          <option value="ldr">LDR light</option>
+          <option value="pir">PIR motion</option>
+          <option value="digital">Generic digital</option>
+          <option value="dht11">DHT11 (temp + humidity)</option>
+          <option value="dht22">DHT22 (temp + humidity)</option>
+          <option value="ultrasonic">HC-SR04 ultrasonic</option>
+          <option value="relay">Relay output</option>
+        </select>
+      </div>
+      <div class="field">
+        <label class="field-label">Data / Trig pin</label>
+        <input class="s-pin" type="number" min="0" max="39" placeholder="GPIO" />
+      </div>
+      <div class="field s-echo-field" style="display:none">
+        <label class="field-label">Echo pin</label>
+        <input class="s-pin2" type="number" min="0" max="39" placeholder="GPIO" />
+      </div>
+      <div class="field">
+        <label class="field-label">Warn high</label>
+        <input class="s-warn-high" type="number" step="any" placeholder="—" />
+      </div>
+      <div class="field">
+        <label class="field-label">Danger high</label>
+        <input class="s-danger-high" type="number" step="any" placeholder="—" />
+      </div>
+      <label class="s-toggle">
+        <input class="s-enabled" type="checkbox" checked>
+        <span>Enabled</span>
+      </label>
+      <button class="s-remove btn-danger" title="Remove sensor">✕</button>
+    </div>
+  </template>
+
+  <script src="/app.js"></script>
+</body>
+</html>
