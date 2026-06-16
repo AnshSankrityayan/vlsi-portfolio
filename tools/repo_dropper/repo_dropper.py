@@ -968,17 +968,24 @@ class RepoDropper:
             self.log(msg, "warn"); messagebox.showinfo("No remote", msg); return
         self.log("Pushing to origin...", "info")
 
+        # Build an authenticated URL so Git never needs to prompt for credentials.
+        cfg   = load_config()
+        token = cfg.get("token", "").strip()
+        owner = cfg.get("owner", "").strip()
+        repo  = cfg.get("repo",  "").strip()
+        push_args = ["push"]
+        if token and owner and repo:
+            push_args = ["push", f"https://{owner}:{token}@github.com/{owner}/{repo}.git"]
+
         def worker() -> None:
-            code, out = run_git(
-                ["push"],
-                env={"GIT_TERMINAL_PROMPT": "0"},
-                timeout=120,
-            )
+            c, out = run_git(push_args, timeout=120)
 
             def done() -> None:
-                shown = out if code == 0 else github_auth_hint(out)
-                self.log(shown or "Pushed.", "ok" if code == 0 else "err")
-                if code != 0:
+                # Strip the token from any output before displaying
+                safe_out = out.replace(token, "***") if token else out
+                shown = safe_out if c == 0 else github_auth_hint(safe_out)
+                self.log(shown or "Pushed.", "ok" if c == 0 else "err")
+                if c != 0:
                     messagebox.showerror("git push failed", shown)
                 self._refresh_git_info()
                 self.refresh_status()
