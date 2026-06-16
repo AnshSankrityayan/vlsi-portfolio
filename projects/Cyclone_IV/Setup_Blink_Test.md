@@ -1,4 +1,4 @@
-# 🔬 DE0-Nano FPGA Health Check — LED Blink Test
+# DE0-Nano FPGA Check — LED Blink Test
 
 > **A complete step-by-step guide to verify your Terasic DE0-Nano (Altera Cyclone IV EP4CE22F17C6) is working correctly using a LED blink test in Quartus Prime Lite 20.1.1 and ModelSim 2020.1**
 
