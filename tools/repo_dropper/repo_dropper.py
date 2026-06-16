@@ -536,13 +536,29 @@ class RepoDropper:
         self.file_table.configure(yscrollcommand=vsb.set)
         vsb.grid(row=1, column=1, sticky="ns")
 
-        self.file_table.bind("<Double-1>",  self._on_double_click)
+        self.file_table.bind("<Button-1>",  self._on_cell_click)
         self.file_table.bind("<Delete>",    lambda _: self._remove_selected())
         self.file_table.bind("<BackSpace>", lambda _: self._remove_selected())
         self._bind_context_menu()
+        self._inline_combo: ttk.Combobox | None = None
+
+        # Quick move bar — click a folder chip to move selected files there
+        move_bar = ttk.Frame(tbl_wrap, style="Card.TFrame", padding=(8, 5))
+        move_bar.grid(row=2, column=0, columnspan=2, sticky="ew")
+        ttk.Label(move_bar, text="MOVE SELECTED →", style="Head.TLabel",
+                  padding=(0, 0, 8, 0)).pack(side="left")
+        for folder in PROJECT_FOLDERS:
+            color, icon = CAT.get(folder, ("#94a3b8", "• "))
+            tk.Button(
+                move_bar, text=f"{icon}{folder}",
+                bg=C["surf2"], fg=color,
+                activebackground=C["accent"], activeforeground="#fff",
+                font=("Inter", 9), relief="flat", padx=8, pady=3, cursor="hand2",
+                command=lambda f=folder: self._move_selected_to(f),
+            ).pack(side="left", padx=(0, 4))
 
         self._stats_bar = ttk.Frame(tbl_wrap, style="Card.TFrame", padding=(8, 4))
-        self._stats_bar.grid(row=2, column=0, columnspan=2, sticky="ew")
+        self._stats_bar.grid(row=3, column=0, columnspan=2, sticky="ew")
 
     # ── Organiser — right panel ───────────────────────────────────────────────
     def _build_right(self, parent: ttk.Frame) -> None:
@@ -728,11 +744,13 @@ class RepoDropper:
         act.grid(row=2, column=0, sticky="ew")
 
         for label, cmd, style, tip in [
-            ("⟳  Refresh",     self._gh_refresh,     "TButton",    "Reload tree from GitHub"),
-            ("＋ Upload File",  self._gh_upload,       "TButton",    "Upload a local file to selected folder"),
-            ("📁 New Folder",   self._gh_new_folder,   "TButton",    "Create a new folder in selected location"),
-            ("✎  Edit File",   self._gh_edit,         "Accent.TButton","Load selected file into editor"),
-            ("✕  Delete",      self._gh_delete,       "Del.TButton","Delete selected file or folder"),
+            ("⟳  Refresh",     self._gh_refresh,     "TButton",        "Reload tree from GitHub"),
+            ("＋ Upload File",  self._gh_upload,       "TButton",        "Upload a local file to selected folder"),
+            ("📁 New Folder",   self._gh_new_folder,   "TButton",        "Create a new folder in selected location"),
+            ("✦  Move",        self._gh_move,         "TButton",        "Move selected file or folder to another location"),
+            ("✏  Rename",      self._gh_rename,       "TButton",        "Rename selected file or folder"),
+            ("✎  Edit File",   self._gh_edit,         "Accent.TButton", "Load selected file into editor"),
+            ("✕  Delete",      self._gh_delete,       "Del.TButton",    "Delete selected file or folder"),
         ]:
             b = ttk.Button(act, text=label, command=cmd, style=style)
             b.pack(side="left", padx=(0, 8))
@@ -885,36 +903,50 @@ class RepoDropper:
             self.entries[i].target = folder
         self.refresh_table()
 
-    def _on_double_click(self, event) -> None:
-        if self.file_table.identify_region(event.x, event.y) != "cell":
-            return
-        if self.file_table.identify_column(event.x) != "#1":
-            return
+    def _on_cell_click(self, event) -> None:
+        region = self.file_table.identify_region(event.x, event.y)
+        col    = self.file_table.identify_column(event.x)
         row_id = self.file_table.identify_row(event.y)
-        if not row_id or not row_id.isdigit():
+        if region != "cell" or col != "#1" or not row_id or not row_id.isdigit():
+            self._close_inline_combo()
             return
-        index = int(row_id)
+        self._open_inline_combo(int(row_id))
 
-        pop = tk.Toplevel(self.root)
-        pop.title("Move to folder")
-        pop.configure(bg=C["surf"])
-        pop.geometry("200x250")
-        pop.resizable(False, False)
-        ttk.Label(pop, text="Choose target folder:", style="Card.TLabel",
-                  padding=(10, 8, 10, 4)).pack(anchor="w")
-        for folder in PROJECT_FOLDERS:
-            color, icon = CAT.get(folder, ("#94a3b8", "• "))
-            tk.Button(
-                pop, text=f"  {icon}{folder}",
-                bg=C["surf2"], fg=color,
-                activebackground=C["border"], activeforeground=color,
-                font=("Inter", 10), relief="flat", padx=12, pady=6, anchor="w",
-                command=lambda f=folder, p=pop, i=index: (
-                    self.entries.__setitem__(
-                        i, FileEntry(self.entries[i].source, f, self.entries[i].copied_to)),
-                    self.refresh_table(), p.destroy()
-                ),
-            ).pack(fill="x", padx=8, pady=2)
+    def _open_inline_combo(self, index: int) -> None:
+        self._close_inline_combo()
+        row_id = str(index)
+        # Get bounding box of the folder cell
+        bbox = self.file_table.bbox(row_id, "#1")
+        if not bbox:
+            return
+        x, y, w, h = bbox
+        var = tk.StringVar(value=self.entries[index].target)
+        combo = ttk.Combobox(self.file_table, textvariable=var,
+                             values=list(PROJECT_FOLDERS),
+                             state="readonly", width=12, font=("Inter", 9))
+        combo.place(x=x, y=y, width=w, height=h)
+        combo.focus_set()
+        combo.event_generate("<Button-1>")  # drop it open immediately
+
+        def apply(evt=None):
+            chosen = var.get()
+            if chosen and chosen in PROJECT_FOLDERS:
+                self.entries[index].target = chosen
+                self.refresh_table()
+            self._close_inline_combo()
+
+        combo.bind("<<ComboboxSelected>>", apply)
+        combo.bind("<FocusOut>",           lambda _: self._close_inline_combo())
+        combo.bind("<Escape>",             lambda _: self._close_inline_combo())
+        self._inline_combo = combo
+
+    def _close_inline_combo(self) -> None:
+        if self._inline_combo:
+            try:
+                self._inline_combo.destroy()
+            except Exception:
+                pass
+            self._inline_combo = None
 
     def on_drop(self, event) -> None:
         self.add_paths([Path(p) for p in self.root.tk.splitlist(event.data)])
@@ -1406,6 +1438,220 @@ class RepoDropper:
                     self._gh_log(f"Create failed: {e}"),
                     messagebox.showerror("Create failed", str(e)),
                 ))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    # ── GitHub Browser — rename ───────────────────────────────────────────────
+    def _gh_rename(self) -> None:
+        if not self.gh_api:
+            messagebox.showinfo("Not connected", "Connect to GitHub first."); return
+        src = self._selected_tree_path()
+        if not src:
+            messagebox.showinfo("Nothing selected",
+                                "Select a file or folder in the tree first."); return
+
+        is_file   = src in self._blob_shas
+        old_name  = Path(src).name
+        parent    = str(Path(src).parent) if "/" in src else ""
+
+        new_name = simpledialog.askstring(
+            "Rename", f"New name for  '{old_name}':",
+            initialvalue=old_name, parent=self.root,
+        )
+        if not new_name or new_name.strip() == old_name:
+            return
+        new_name = new_name.strip()
+
+        # Build old→new path mapping (same as move but just swap the name)
+        if is_file:
+            new_path = f"{parent}/{new_name}".lstrip("/")
+            targets  = {src: new_path}
+        else:
+            prefix = src + "/"
+            targets = {}
+            for p in list(self._blob_shas):
+                if p == src or p.startswith(prefix):
+                    rest  = p[len(src):].lstrip("/")
+                    new_p = f"{parent}/{new_name}/{rest}".lstrip("/") if rest \
+                            else f"{parent}/{new_name}".lstrip("/")
+                    targets[p] = new_p
+
+        if not targets:
+            messagebox.showinfo("Empty", "Nothing to rename."); return
+
+        self._gh_log(f"Renaming '{old_name}' → '{new_name}' ({len(targets)} file(s))…")
+
+        def worker():
+            done_count = 0
+            errors: list[str] = []
+            for old_path, new_path in targets.items():
+                try:
+                    data    = self.gh_api.file(old_path)       # type: ignore[union-attr]
+                    content = base64.b64decode(data["content"]).decode("utf-8")
+                    old_sha = data["sha"]
+                    self.gh_api.put(new_path, content, None,   # type: ignore[union-attr]
+                                    f"rename: {old_name} → {new_name}")
+                    self.gh_api.delete(old_path, old_sha,       # type: ignore[union-attr]
+                                       f"rename: remove old {old_path}")
+                    done_count += 1
+                except Exception as exc:
+                    errors.append(f"{old_path}: {exc}")
+
+            def finish():
+                msg = f"✓ Renamed to '{new_name}' ({done_count} file(s))."
+                if errors:
+                    msg += f"  {len(errors)} error(s): {errors[0]}"
+                self._gh_log(msg)
+                self._gh_refresh()
+            self.root.after(0, finish)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    # ── GitHub Browser — move ─────────────────────────────────────────────────
+    def _gh_move(self) -> None:
+        if not self.gh_api:
+            messagebox.showinfo("Not connected", "Connect to GitHub first."); return
+        src = self._selected_tree_path()
+        if not src:
+            messagebox.showinfo("Nothing selected",
+                                "Select a file or folder in the tree first."); return
+
+        is_file = src in self._blob_shas
+
+        # Build list of all folders in the tree for the picker
+        folders = sorted({
+            str(Path(p).parent) for p in self._blob_shas
+            if str(Path(p).parent) not in (".", "")
+        } | {""})
+
+        # ── Destination picker dialog ─────────────────────────────────────────
+        dlg = tk.Toplevel(self.root)
+        dlg.title("Move to…")
+        dlg.configure(bg=C["surf"])
+        dlg.geometry("400x480")
+        dlg.resizable(False, True)
+        dlg.grab_set()
+
+        ttk.Label(dlg, text=f"Moving:  {src}", style="Card.TLabel",
+                  font=("Inter", 10, "bold"), padding=(14, 12, 14, 4)).pack(anchor="w")
+        ttk.Label(dlg, text="Choose destination folder:",
+                  style="Head.TLabel", padding=(14, 4, 14, 6)).pack(anchor="w")
+
+        # Search box
+        search_var = tk.StringVar()
+        search_entry = ttk.Entry(dlg, textvariable=search_var, font=("Inter", 10))
+        search_entry.pack(fill="x", padx=14, pady=(0, 6))
+
+        # Folder listbox
+        list_frame = ttk.Frame(dlg, style="Card.TFrame")
+        list_frame.pack(fill="both", expand=True, padx=14)
+        lb = tk.Listbox(list_frame, bg=C["surf2"], fg=C["text"],
+                        selectbackground=C["accent"], selectforeground="#fff",
+                        font=("Inter", 10), relief="flat",
+                        activestyle="none", borderwidth=0)
+        lb_scroll = ttk.Scrollbar(list_frame, orient="vertical", command=lb.yview)
+        lb.configure(yscrollcommand=lb_scroll.set)
+        lb_scroll.pack(side="right", fill="y")
+        lb.pack(side="left", fill="both", expand=True)
+
+        # Custom path entry at the bottom
+        ttk.Label(dlg, text="Or type a custom path:",
+                  style="Head.TLabel", padding=(14, 8, 14, 2)).pack(anchor="w")
+        custom_var = tk.StringVar()
+        custom_entry = ttk.Entry(dlg, textvariable=custom_var, font=("Inter", 10))
+        custom_entry.pack(fill="x", padx=14, pady=(0, 8))
+
+        all_folders = ["(repo root)"] + folders
+
+        def _refresh_list(*_):
+            q = search_var.get().lower()
+            lb.delete(0, "end")
+            for f in all_folders:
+                if q in f.lower():
+                    lb.insert("end", f"  📁  {f}" if f != "(repo root)" else "  🏠  (repo root)")
+
+        search_var.trace_add("write", _refresh_list)
+        _refresh_list()
+
+        def _on_lb_select(_evt=None):
+            sel = lb.curselection()
+            if not sel:
+                return
+            raw = lb.get(sel[0]).strip().lstrip("📁🏠 ")
+            custom_var.set("" if raw == "(repo root)" else raw)
+
+        lb.bind("<<ListboxSelect>>", _on_lb_select)
+
+        def _confirm():
+            dest_folder = custom_var.get().strip().strip("/")
+            dlg.destroy()
+            self._execute_move(src, dest_folder, is_file)
+
+        btn_row = ttk.Frame(dlg, style="Card.TFrame", padding=(14, 4, 14, 14))
+        btn_row.pack(fill="x")
+        ttk.Button(btn_row, text="✦  Move here", style="Accent.TButton",
+                   command=_confirm).pack(side="right")
+        ttk.Button(btn_row, text="Cancel",
+                   command=dlg.destroy).pack(side="right", padx=(0, 8))
+
+        search_entry.focus_set()
+        dlg.bind("<Return>", lambda _: _confirm())
+
+    def _execute_move(self, src: str, dest_folder: str, is_file: bool) -> None:
+        # Build mapping: old_path -> new_path
+        if is_file:
+            name = Path(src).name
+            new_path = f"{dest_folder}/{name}".lstrip("/")
+            targets = {src: new_path}
+        else:
+            prefix = src + "/"
+            src_parent = str(Path(src).parent) if "/" in src else ""
+            targets = {}
+            for p in list(self._blob_shas):
+                if p == src or p.startswith(prefix):
+                    rel = p[len(src_parent):].lstrip("/")
+                    new_p = f"{dest_folder}/{rel}".lstrip("/")
+                    targets[p] = new_p
+
+        if not targets:
+            messagebox.showinfo("Empty", "Nothing to move."); return
+
+        # Confirm
+        preview = "\n".join(f"  {o}  →  {n}" for o, n in list(targets.items())[:5])
+        if len(targets) > 5:
+            preview += f"\n  … and {len(targets) - 5} more"
+        if not messagebox.askyesno("Confirm move",
+                                   f"Move {len(targets)} file(s)?\n\n{preview}"):
+            return
+
+        self._gh_log(f"Moving {len(targets)} file(s)…")
+
+        def worker():
+            done_count = 0
+            errors: list[str] = []
+            for old_path, new_path in targets.items():
+                try:
+                    # Fetch old file
+                    data    = self.gh_api.file(old_path)       # type: ignore[union-attr]
+                    content = base64.b64decode(data["content"]).decode("utf-8")
+                    old_sha = data["sha"]
+                    # Create at new path
+                    self.gh_api.put(new_path, content, None,   # type: ignore[union-attr]
+                                    f"move: {Path(old_path).name} → {new_path}")
+                    # Delete old path
+                    self.gh_api.delete(old_path, old_sha,       # type: ignore[union-attr]
+                                       f"move: remove old {old_path}")
+                    done_count += 1
+                except Exception as exc:
+                    errors.append(f"{old_path}: {exc}")
+
+            def finish():
+                msg = f"✓ Moved {done_count} file(s)."
+                if errors:
+                    msg += f"  {len(errors)} error(s): {errors[0]}"
+                self._gh_log(msg)
+                self._gh_refresh()
+            self.root.after(0, finish)
 
         threading.Thread(target=worker, daemon=True).start()
 
