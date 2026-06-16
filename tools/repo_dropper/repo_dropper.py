@@ -27,7 +27,20 @@ except Exception:
 APP_DIR   = Path(__file__).resolve().parent
 REPO_ROOT = APP_DIR.parents[1]
 PROJECT_FOLDERS = ("rtl", "tb", "sim", "waves", "synthesis", "docs")
-IGNORED_DIRS    = {".git", ".pio", ".venv", "__pycache__", "build", "dist", "node_modules"}
+IGNORED_DIRS    = {".git", ".pio", ".venv", "__pycache__", "build", "dist", "node_modules",
+                   "db", "incremental_db", "simulation", ".qsys_edit"}
+IGNORED_EXTS    = {
+    # Quartus build artifacts
+    ".cdb", ".hdb", ".rdb", ".kpt", ".logdb", ".ammdb", ".bpm", ".idb",
+    ".dfp", ".rcfdb", ".dpi", ".sig", ".ddb", ".tdb", ".qdb", ".qpg", ".qtl",
+    ".sof", ".pof", ".stp", ".sft", ".jdi", ".pin", ".smsg", ".vo",
+    ".lpc", ".rrp", ".rtlv", ".vpr", ".hif", ".hier_info", ".db_info",
+    # Quartus misc
+    ".sci", ".xrf", ".qmsg", ".summary",
+    # Backup files
+    ".bak",
+}
+IGNORED_NAMES   = {"_vmake", "_info", "modelsim.ini", "README"}
 GIT_MANAGED     = (".gitignore", "projects", "run_repo_dropper.sh", "tools/repo_dropper")
 HISTORY_FILE    = APP_DIR / ".project_history.json"
 CONFIG_FILE     = APP_DIR / ".gh_config.json"
@@ -101,7 +114,13 @@ def classify_file(path: Path, fallback: str = "docs") -> str:
 
 
 def should_ignore(path: Path) -> bool:
-    return any(part in IGNORED_DIRS for part in path.parts)
+    if any(part in IGNORED_DIRS for part in path.parts):
+        return True
+    if path.suffix.lower() in IGNORED_EXTS:
+        return True
+    if path.name in IGNORED_NAMES:
+        return True
+    return False
 
 
 def run_git(
