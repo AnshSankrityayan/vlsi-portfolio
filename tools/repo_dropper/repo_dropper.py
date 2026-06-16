@@ -527,12 +527,15 @@ class RepoDropper:
 
         row = ttk.Frame(git_card, style="Card.TFrame")
         row.pack(fill="x")
-        row.columnconfigure((0, 1), weight=1)
+        row.columnconfigure((0, 1, 2), weight=1)
         commit_btn = ttk.Button(row, text="✓  Commit", command=self.git_commit)
         commit_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6))
         Tooltip(commit_btn, "git add + git commit")
+        pull_btn = ttk.Button(row, text="↓  Pull", command=self.git_pull)
+        pull_btn.grid(row=0, column=1, sticky="ew", padx=(0, 6))
+        Tooltip(pull_btn, "git pull --rebase from origin")
         push_btn = ttk.Button(row, text="↑  Push", style="Go.TButton", command=self.git_push)
-        push_btn.grid(row=0, column=1, sticky="ew")
+        push_btn.grid(row=0, column=2, sticky="ew")
         Tooltip(push_btn, "git push to origin")
 
         ref_btn = ttk.Button(git_card, text="⟳  Refresh status",
@@ -960,6 +963,32 @@ class RepoDropper:
         if code != 0 and "nothing to commit" not in out.lower():
             messagebox.showerror("git commit failed", out); return
         self.refresh_status()
+
+    def git_pull(self) -> None:
+        self.log("Pulling from origin…", "info")
+
+        cfg   = load_config()
+        token = cfg.get("token", "").strip()
+        owner = cfg.get("owner", "").strip()
+        repo  = cfg.get("repo",  "").strip()
+        url_args: list[str] = []
+        if token and owner and repo:
+            url_args = [f"https://{owner}:{token}@github.com/{owner}/{repo}.git"]
+
+        def worker() -> None:
+            c, out = run_git(["pull", "--rebase", *url_args], timeout=120)
+
+            def done() -> None:
+                safe = out.replace(token, "***") if token else out
+                self.log(safe or "Pulled.", "ok" if c == 0 else "err")
+                if c != 0:
+                    messagebox.showerror("git pull failed", safe)
+                self._refresh_git_info()
+                self.refresh_status()
+
+            self.root.after(0, done)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def git_push(self) -> None:
         code, remotes = run_git(["remote"])
