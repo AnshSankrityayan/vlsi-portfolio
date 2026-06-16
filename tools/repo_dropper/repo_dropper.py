@@ -1010,7 +1010,10 @@ class RepoDropper:
             url_args = [f"https://{owner}:{token}@github.com/{owner}/{repo}.git", "main"]
 
         def worker() -> None:
+            # Stash any uncommitted changes so rebase can proceed cleanly
+            run_git(["stash"])
             c, out = run_git(["pull", "--rebase", *url_args], timeout=120)
+            run_git(["stash", "pop"])
 
             def done() -> None:
                 safe = out.replace(token, "***") if token else out

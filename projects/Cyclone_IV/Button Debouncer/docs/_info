@@ -1,0 +1,59 @@
+m255
+K4
+z2
+!s11f vlog 2020.1 2020.02, Feb 28 2020
+13
+!s112 1.1
+!i10d 8192
+!i10e 25
+!i10f 100
+cModel Technology
+Z0 dC:/intelFPGA_lite/20.1/VLSI_Projects/Button_Debouncer/simulation/modelsim
+vhard_block
+Z1 !s110 1781600809
+!i10b 1
+!s100 8DL]0=_GKN`<ZF3QNlV3h2
+Z2 !s11b Dg1SIo80bB@j0V0VzS_@n1
+I`<b=hGYfQjNFXbjFda`8F1
+Z3 VDg1SIo80bB@j0V0VzS_@n1
+R0
+Z4 w1781600794
+Z5 8Button_Debouncer.vo
+Z6 FButton_Debouncer.vo
+!i122 0
+L0 2064 34
+Z7 OV;L;2020.1;71
+r1
+!s85 0
+31
+Z8 !s108 1781600808.000000
+!s107 Button_Debouncer.vo|
+Z9 !s90 -reportprogress|300|-vlog01compat|-work|work|+incdir+.|Button_Debouncer.vo|
+!i113 1
+Z10 o-vlog01compat -work work
+Z11 !s92 -vlog01compat -work work +incdir+.
+Z12 tCvgOpt 0
+vled_counter
+R1
+!i10b 1
+!s100 YMPGRYG9Z4ZlBFO34Ve`60
+R2
+IOcL67X^d_b26^`JVPSn8O0
+R3
+R0
+R4
+R5
+R6
+!i122 0
+L0 32 2031
+R7
+r1
+!s85 0
+31
+R8
+Z13 !s107 Button_Debouncer.vo|
+R9
+!i113 1
+R10
+R11
+R12
