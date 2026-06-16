@@ -271,6 +271,7 @@ class RepoDropper:
         self.entries:  list[FileEntry] = []
         self.history:  list[str]       = load_history()
         self.project_name   = tk.StringVar(value=self.history[0] if self.history else "01_nand2")
+        self.dest_path      = tk.StringVar(value="projects/")
         self.target_folder  = tk.StringVar(value="auto")
         self.commit_message = tk.StringVar()
         self.create_readme  = tk.BooleanVar(value=True)
@@ -438,7 +439,7 @@ class RepoDropper:
         self._name_box = ttk.Combobox(cfg, textvariable=self.project_name,
                                       values=self.history, width=20)
         self._name_box.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4, 0))
-        Tooltip(self._name_box, "Slug used as  projects/<name>/  in the repo")
+        Tooltip(self._name_box, "Slug used as the project name")
 
         ttk.Label(cfg, text="PLACEMENT", style="Head.TLabel").grid(
             row=0, column=2, sticky="w", padx=(14, 0))
@@ -451,6 +452,19 @@ class RepoDropper:
 
         ttk.Checkbutton(cfg, text=" Auto-README", variable=self.create_readme).grid(
             row=1, column=4, padx=(14, 0), pady=(4, 0))
+
+        # Destination path row
+        ttk.Label(cfg, text="DESTINATION IN REPO", style="Head.TLabel").grid(
+            row=2, column=0, sticky="w", pady=(10, 0))
+        dest_row = ttk.Frame(cfg, style="Card.TFrame")
+        dest_row.grid(row=3, column=0, columnspan=5, sticky="ew", pady=(4, 0))
+        dest_row.columnconfigure(0, weight=1)
+        ttk.Entry(dest_row, textvariable=self.dest_path).grid(
+            row=0, column=0, sticky="ew", padx=(0, 6))
+        browse_btn = ttk.Button(dest_row, text="📂 Browse",
+                                command=self._pick_dest_folder, padding=(8, 5))
+        browse_btn.grid(row=0, column=1)
+        Tooltip(browse_btn, "Pick any folder inside the repo as the destination")
 
         bar = ttk.Frame(col, style="App.TFrame")
         bar.grid(row=1, column=0, sticky="ew", pady=(0, 6))
@@ -735,7 +749,10 @@ class RepoDropper:
             return False
 
     def _auto_commit_msg(self, *_) -> None:
-        self.commit_message.set(f"feat: add {slugify(self.project_name.get())} project")
+        slug = slugify(self.project_name.get())
+        self.commit_message.set(f"feat: add {slug} project")
+        if self.dest_path.get().startswith("projects/"):
+            self.dest_path.set(f"projects/{slug}")
 
     def log(self, text: str, tag: str = "") -> None:
         self.output.configure(state="normal")
@@ -896,8 +913,25 @@ class RepoDropper:
         self.refresh_table()
         self.log("Cleared.", "warn")
 
+    def _pick_dest_folder(self) -> None:
+        sel = filedialog.askdirectory(
+            title="Choose destination folder inside repo",
+            initialdir=str(REPO_ROOT),
+        )
+        if not sel:
+            return
+        sel_path = Path(sel).resolve()
+        try:
+            rel = sel_path.relative_to(REPO_ROOT)
+            self.dest_path.set(str(rel))
+        except ValueError:
+            messagebox.showerror("Outside repo",
+                                 f"That folder is outside the repo root:\n{REPO_ROOT}\n\n"
+                                 "Choose a folder inside the repo.")
+
     def project_dir(self) -> Path:
-        return REPO_ROOT / "projects" / slugify(self.project_name.get())
+        dest = self.dest_path.get().strip().lstrip("/")
+        return REPO_ROOT / dest if dest else REPO_ROOT / "projects" / slugify(self.project_name.get())
 
     def copy_into_repo(self) -> None:
         if not self.entries:
@@ -973,7 +1007,7 @@ class RepoDropper:
         repo  = cfg.get("repo",  "").strip()
         url_args: list[str] = []
         if token and owner and repo:
-            url_args = [f"https://{owner}:{token}@github.com/{owner}/{repo}.git"]
+            url_args = [f"https://{owner}:{token}@github.com/{owner}/{repo}.git", "main"]
 
         def worker() -> None:
             c, out = run_git(["pull", "--rebase", *url_args], timeout=120)
@@ -1004,7 +1038,7 @@ class RepoDropper:
         repo  = cfg.get("repo",  "").strip()
         push_args = ["push"]
         if token and owner and repo:
-            push_args = ["push", f"https://{owner}:{token}@github.com/{owner}/{repo}.git"]
+            push_args = ["push", f"https://{owner}:{token}@github.com/{owner}/{repo}.git", "HEAD:main"]
 
         def worker() -> None:
             c, out = run_git(push_args, timeout=120)
