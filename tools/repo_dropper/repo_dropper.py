@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -103,10 +104,49 @@ def should_ignore(path: Path) -> bool:
     return any(part in IGNORED_DIRS for part in path.parts)
 
 
-def run_git(args: list[str]) -> tuple[int, str]:
-    p = subprocess.run(["git", *args], cwd=REPO_ROOT, text=True,
-                       capture_output=True, check=False)
+def run_git(
+    args: list[str],
+    *,
+    env: dict[str, str] | None = None,
+    timeout: int | None = None,
+) -> tuple[int, str]:
+    try:
+        p = subprocess.run(
+            ["git", *args],
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+            env={**os.environ, **(env or {})},
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return 124, "git command timed out. Check your GitHub credentials, then try again."
     return p.returncode, "\n".join(x for x in (p.stdout.strip(), p.stderr.strip()) if x)
+
+
+def github_auth_hint(output: str) -> str:
+    text = output.lower()
+    auth_markers = (
+        "authentication failed",
+        "could not read username",
+        "terminal prompts disabled",
+        "permission denied",
+        "invalid username or password",
+        "support for password authentication was removed",
+    )
+    if not any(marker in text for marker in auth_markers):
+        return output
+    hint = (
+        "\n\nGitHub does not accept your account password for HTTPS pushes.\n"
+        "Use one of these options:\n"
+        "1. Create a GitHub Personal Access Token and use it when Git asks for a password.\n"
+        "2. Switch this repo to SSH and push with your SSH key.\n"
+        "\nOn macOS, the Allow / Deny / Always Allow prompt is Keychain asking whether "
+        "Git may read saved credentials. If you trust this repo and Git install, choose "
+        "Always Allow so future pushes do not keep asking."
+    )
+    return (output or "GitHub authentication failed.") + hint
 
 
 def load_history() -> list[str]:
@@ -926,12 +966,26 @@ class RepoDropper:
         if code != 0 or not remotes.strip():
             msg = "No remote configured.\nRun:  git remote add origin <url>"
             self.log(msg, "warn"); messagebox.showinfo("No remote", msg); return
-        code, out = run_git(["push"])
-        self.log(out or "Pushed.", "ok" if code == 0 else "err")
-        if code != 0:
-            messagebox.showerror("git push failed", out)
-        self._refresh_git_info()
-        self.refresh_status()
+        self.log("Pushing to origin...", "info")
+
+        def worker() -> None:
+            code, out = run_git(
+                ["push"],
+                env={"GIT_TERMINAL_PROMPT": "0"},
+                timeout=120,
+            )
+
+            def done() -> None:
+                shown = out if code == 0 else github_auth_hint(out)
+                self.log(shown or "Pushed.", "ok" if code == 0 else "err")
+                if code != 0:
+                    messagebox.showerror("git push failed", shown)
+                self._refresh_git_info()
+                self.refresh_status()
+
+            self.root.after(0, done)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def refresh_status(self) -> None:
         code, status = run_git(["status", "--short"])
