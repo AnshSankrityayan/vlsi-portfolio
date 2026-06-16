@@ -579,22 +579,6 @@ C:\intelFPGA_lite\20.1\Demo\
 
 ---
 
-## Next Steps
-
-Once your board passes this health check, here are suggested next projects in order of complexity:
-
-| Level | Project | What You Learn |
-|---|---|---|
-| ⭐ | **UART** — send "Hello" to PC terminal | Serial communication |
-| ⭐⭐ | **VGA Controller** — display on monitor | Timing, pixel clocks |
-| ⭐⭐ | **SPI** — read onboard accelerometer | Sensor interfacing |
-| ⭐⭐⭐ | **SDRAM Controller** — use 32MB RAM | Memory interfaces |
-| ⭐⭐⭐ | **FIR Filter** — process audio | DSP on FPGA |
-| ⭐⭐⭐⭐ | **RISC-V Core** — build your own CPU | Computer architecture |
-| ⭐⭐⭐⭐ | **AES Engine** — hardware encryption | Security hardware |
-
----
-
 ## References
 
 - [Terasic DE0-Nano User Manual](https://www.terasic.com.tw/cgi-bin/page/archive.pl?Language=English&CategoryNo=139&No=593&PartNo=4)
