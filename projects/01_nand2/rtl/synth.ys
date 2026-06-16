@@ -1,7 +1,0 @@
-read_verilog nand2.v
-synth -top nand2
-
-# Map combinatorial logic to Sky130 standard cells
-abc -liberty ../pdk/sky130_hd/timing/sky130_fd_sc_hd__tt_025C_1v80.lib
-clean
-write_json nand2.json
